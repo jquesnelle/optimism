@@ -62,11 +62,6 @@ export interface BaseServiceV2Params<TOptions, TMetrics extends MetricsV2> {
   loopIntervalMs?: number
   port?: number
   hostname?: string
-  /**
-   * Optionally override promBundleConfig defaults
-   * https://www.npmjs.com/package/express-prom-bundle
-   */
-  promBundleConfig?: promBundle.Opts
 }
 
 export type ExpressRouter = Router
@@ -398,13 +393,36 @@ export abstract class BaseServiceV2<
 
       // Metrics.
       // Will expose a /metrics endpoint by default.
+
+      const router = express.Router()
+
+      if (this.routes) {
+        this.routes(router)
+      }
+
       app.use(
         promBundle({
           promRegistry: this.metricsRegistry,
           includeMethod: true,
           includePath: true,
           includeStatusCode: true,
-          ...this.params.promBundleConfig,
+          bypass: (req) => {
+            // Note we are bypassing all routes that aren't at /api/* by only including the router.stack
+            for (const r of router.stack) {
+              if (req.path.includes(r.path)) {
+                return false
+              }
+            }
+            return true
+          },
+          normalizePath: (req) => {
+            for (const r of router.stack) {
+              if (req.path.includes(r.path)) {
+                return r.path
+              }
+            }
+            throw new Error('Not a path that should have gotten here')
+          },
         })
       )
 
@@ -417,8 +435,6 @@ export abstract class BaseServiceV2<
 
       // Registery user routes.
       if (this.routes) {
-        const router = express.Router()
-        this.routes(router)
         app.use('/api', router)
       }
 
