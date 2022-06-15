@@ -46,7 +46,7 @@ function wait_up {
     sleep 0.25
 
     ((i=i+1))
-    if [ "$i" -eq 120 ]; then
+    if [ "$i" -eq 240 ]; then
       echo " Timeout!" >&2
       exit 0
     fi
@@ -85,33 +85,14 @@ else
   echo "Contracts already deployed, skipping."
 fi
 
-function get_deployed_bytecode() {
-    echo $(jq -r .deployedBytecode $CONTRACTS_BEDROCK/artifacts/contracts/$1)
-}
-
-# Pull out the necessary bytecode/addresses from the artifacts/deployments.
-L2_TO_L1_MESSAGE_PASSER_BYTECODE=$(get_deployed_bytecode L2/L2ToL1MessagePasser.sol/L2ToL1MessagePasser.json)
-L2_CROSS_DOMAIN_MESSENGER_BYTECODE=$(get_deployed_bytecode L2/L2CrossDomainMessenger.sol/L2CrossDomainMessenger.json)
-OPTIMISM_MINTABLE_TOKEN_FACTORY_BYTECODE=$(get_deployed_bytecode universal/OptimismMintableTokenFactory.sol/OptimismMintableTokenFactory.json)
-L2_STANDARD_BRIDGE_BYTECODE=$(get_deployed_bytecode L2/L2StandardBridge.sol/L2StandardBridge.json)
-L1_BLOCK_INFO_BYTECODE=$(get_deployed_bytecode L2/L1Block.sol/L1Block.json)
-
-DEPOSIT_CONTRACT_ADDRESS=$(jq -r .address < $CONTRACTS_BEDROCK/deployments/devnetL1/OptimismPortal.json)
-L2OO_ADDRESS=$(jq -r .address < $CONTRACTS_BEDROCK/deployments/devnetL1/L2OutputOracle.json)
-
-# Replace values in the L2 genesis file. It doesn't matter if this gets run every time,
-# since the replaced values will be the same.
-jq ". | .alloc.\"4200000000000000000000000000000000000015\".code = \"$L1_BLOCK_INFO_BYTECODE\"" < ./ops-bedrock/genesis-l2.json | \
-  jq ". | .alloc.\"4200000000000000000000000000000000000015\".balance = \"0x0\"" | \
-  jq ". | .alloc.\"4200000000000000000000000000000000000000\".code = \"$L2_TO_L1_MESSAGE_PASSER_BYTECODE\"" | \
-  jq ". | .alloc.\"4200000000000000000000000000000000000000\".balance = \"0x0\"" | \
-  jq ". | .alloc.\"4200000000000000000000000000000000000007\".code = \"$L2_CROSS_DOMAIN_MESSENGER_BYTECODE\"" | \
-  jq ". | .alloc.\"4200000000000000000000000000000000000007\".balance = \"0x0\"" | \
-  jq ". | .alloc.\"4200000000000000000000000000000000000012\".code = \"$OPTIMISM_MINTABLE_TOKEN_FACTORY_BYTECODE\"" | \
-  jq ". | .alloc.\"4200000000000000000000000000000000000012\".balance = \"0x0\"" | \
-  jq ". | .alloc.\"4200000000000000000000000000000000000010\".code = \"$L2_STANDARD_BRIDGE_BYTECODE\"" | \
-  jq ". | .alloc.\"4200000000000000000000000000000000000010\".balance = \"0x0\"" | \
-  jq ". | .timestamp = \"$GENESIS_TIMESTAMP\" " > ./.devnet/genesis-l2.json
+(
+  # ops-bedrock/.devnet/genesis-l2.json
+  echo "Creating L2 genesis file"
+  cd $CONTRACTS_BEDROCK
+  npx hardhat --network devnetL1 genesis
+  mv genesis.json ../../.devnet/genesis-l2.json
+  echo "Created L2 Genesis"
+)
 
 # Bring up L2.
 (
@@ -147,6 +128,10 @@ L2_GENESIS=$(curl \
     -H "Content-Type: application/json" \
     --data '{"jsonrpc":"2.0","method":"eth_getBlockByNumber","params":["0x0", false],"id":1}' \
     $L2_URL)
+
+DEPOSIT_CONTRACT_ADDRESS=$(jq -r .address < $CONTRACTS_BEDROCK/deployments/devnetL1/OptimismPortal.json)
+L2OO_ADDRESS=$(jq -r .address < $CONTRACTS_BEDROCK/deployments/devnetL1/L2OutputOracle.json)
+
 
 # Generate the rollup config.
 jq ". | .genesis.l1.hash = \"$(echo $L1_GENESIS | jq -r '.result.hash')\"" < ./ops-bedrock/rollup.json | \
