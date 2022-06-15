@@ -47,9 +47,9 @@ type ChannelInReaderStage interface {
 
 type BatchQueueStage interface {
 	LastL1Origin() eth.L1BlockRef
-	AddOrigin(origin eth.L1BlockRef) error
-	AddBatch(batch *BatchData) error
-	DeriveL2Inputs(ctx context.Context, lastL2Timestamp uint64) ([]*eth.PayloadAttributes, error)
+	AddL1Block(origin eth.L1BlockRef) error
+	AddBatch(batch *BatchData, origin eth.L1BlockRef) error
+	DeriveL2Inputs(ctx context.Context, l2SafeHead eth.L2BlockRef) ([]*eth.PayloadAttributes, error)
 	Reset(l1Origin eth.L1BlockRef)
 }
 
@@ -233,7 +233,7 @@ func (dp *DerivationPipeline) readChannel() error {
 func (dp *DerivationPipeline) readBatch() error {
 	// move forward the batch queue if the ch reader has new L1 data
 	if dp.batchQueue.LastL1Origin() != dp.chInReader.CurrentL1Origin() {
-		return dp.batchQueue.AddOrigin(dp.chInReader.CurrentL1Origin())
+		return dp.batchQueue.AddL1Block(dp.chInReader.CurrentL1Origin())
 	}
 	var batch BatchData
 	if err := dp.chInReader.ReadBatch(&batch); err == io.EOF {
@@ -243,11 +243,11 @@ func (dp *DerivationPipeline) readBatch() error {
 		dp.chInReader.NextChannel()
 		return nil
 	}
-	return dp.batchQueue.AddBatch(&batch)
+	return dp.batchQueue.AddBatch(&batch, dp.chInReader.CurrentL1Origin())
 }
 
 func (dp *DerivationPipeline) readAttributes(ctx context.Context) error {
-	attrs, err := dp.batchQueue.DeriveL2Inputs(ctx, dp.engineQueue.LastL2Time())
+	attrs, err := dp.batchQueue.DeriveL2Inputs(ctx, dp.engineQueue.SafeL2Head())
 	if err != nil {
 		return err
 	}
