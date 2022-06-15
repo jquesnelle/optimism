@@ -11,6 +11,7 @@ import '@foundry-rs/hardhat-forge'
 import '@eth-optimism/hardhat-deploy-config'
 
 // Hardhat tasks
+import './tasks/genesis'
 import './tasks/deposits'
 
 subtask(TASK_COMPILE_SOLIDITY_GET_SOURCE_PATHS).setAction(
@@ -78,6 +79,20 @@ const config: HardhatUserConfig = {
     },
     sequencerAddress: {
       type: 'address',
+    },
+  },
+  external: {
+    contracts: [
+      {
+        artifacts: '../contracts/artifacts',
+      },
+      {
+        artifacts: '../contracts-governance/artifacts',
+      },
+    ],
+    deployments: {
+      kovan: ['../contracts/deployments/kovan'],
+      goerli: ['../contracts/deployments/goerli'],
     },
   },
   solidity: {
